@@ -1,0 +1,79 @@
+---
+title: "README"
+output: html_document
+---
+
+# Aim
+
+The aim of this paper is to find the best hedge for a Rand depreciation
+
+# Techniques used
+
+We will most probably use DCC modelling
+Maybe also eGARCH modelling, to compare the results to that of the DCC model
+
+# Data
+
+Insert the data we use here
+
+# Packages used
+
+Insert all the packages used here
+
+# Miscellaneous Notes
+
+Example1: Note when running the function, BigFunc, it takes roughly 20 minutes
+Example2: I have issues having my model converge
+Example3: I am stuck with code in section xxx, please check this Nico
+
+***
+
+# Paper
+
+## Introduction
+
+Here I intend introducing the paper and discussing what I want to do
+
+## Methodology
+
+# source my functions (short handle to insert code chunk: ctrl+alt+i)
+
+```{r Initialize}
+L <- list.files("Code", full.names = true)
+for (i in 1:length(L)){
+  source(L[i])
+}
+```
+# load my packages
+
+```{r Data Import}
+Data <- read_rds("Data/ReturnsData.rds")
+```
+
+```{r Returns create}
+
+```
+
+```{r Regressions}
+
+```
+
+```{r Table Output}
+
+```
+
+```{r Plots}
+
+```
+
+library(rmsfuns)
+load_pkg(c("PerformanceAnalytics", "tidyverse"))
+
+
+## Literature Review
+
+## Results
+
+## Conclusion
+
+
