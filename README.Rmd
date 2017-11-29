@@ -3,6 +3,12 @@ title: "README"
 output: html_document
 ---
 
+# First off...
+
+We have begun with calculating the returns for the ETFs (called etfs) and merging the AllFunds dataset with the ReturnsData dataset. We ran into problems calculating the returns, please see questions below. We have tried to use the code from the tuts. This calculates the returns, but does not add them to the dataset. Not sure how to do this...
+Thank you 
+
+
 # Aim
 
 The aim of this paper is to find the best hedge for a Rand depreciation
@@ -14,7 +20,34 @@ Maybe also eGARCH modelling, to compare the results to that of the DCC model
 
 # Data
 
-Insert the data we use here
+## Data Prep
+
+First we loaded the data ReturnsData and ETFs, respectively.
+
+```{r Code for loading data}
+etfs <-
+  readRDS("data/AllFunds.rds")
+
+data_original <-
+  readRDS("data/ReturnsData.rds")
+```
+
+
+After this, we calculated the continuously compunded returns for the ETFs. We did this based on the class notes which cited Bacon (2011), stating that we should use this measure of returns.
+
+```{r Calculating returns for ETFs}
+
+
+
+```
+
+
+##Questions:
+
+Is this correct? What returns are in the ReturnsData data set?\\
+Code returns error: not numeric
+
+
 
 # Packages used
 
