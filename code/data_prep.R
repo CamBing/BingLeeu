@@ -1,34 +1,48 @@
 
 # Packages ----------------------------------------------------------------
 packages <-
-  c("tidyverse", "lubridate", "dplyr", "readr", "PerformanceAnalytics", "tbl2xts" )
+  c("tidyverse", "lubridate", "dplyr", "readr", "PerformanceAnalytics", "tbl2xts", "broom" )
+library("rmsfuns")
 load_pkg(packages)
+
 # Data Prep ---------------------------------------------------------------
 
 ## Loading data
+
 etfs <-
-  readRDS("data/AllFunds.rds")
+  readRDS("data/AllFunds.rds") %>% tbl_df()
 
 data_original <-
-  readRDS("data/ReturnsData.rds")
+  readRDS("data/SA_Rand_Returns.rds")
 
 ## Calculating returns for ETFs
-etf_returns <- 
-  etfs %>%
-  tbl_xts(.) %>% 
-  Return.calculate(., method = c("compound", "simple")[1]) %>% 
-  xts_tbl()
-  
+
+N_Capping <- 80 # Parameter that trims the universe set - won't be of much practical use if an obscure and small and thinly traded stock is a great hedge. Focus, e.g., on the top 80 stocks by Market Cap.
+
+ETFReturns <-
+  etfs %>% group_by(Ticker) %>% 
+  rename("TRI" = TOT_RETURN_INDEX_NET_DVDS) %>% 
+  mutate(Return = TRI / lag(TRI)-1) %>% ungroup()
+
+SAData_Returns <-   
+  data_original %>% 
+  filter(Universe == "JALSHAll") %>% 
+  mutate(Return = coalesce(Return, 0) ) %>%   # To make NA's zero - check whether this fits in to your study / makes sense --> motivate.
+  ungroup() %>% select(date, Ticker, BICS_LEVEL_1_SECTOR_NAME, Market.Cap, Return) %>% 
+  group_by(date) %>% 
+  arrange(date, Market.Cap) %>% 
+  top_n(N_Capping, "Market.Cap") %>% ungroup()
 
 
-  
 
+# Merging datasets:
+mergeddataset <- 
+  bind_rows(
+    ETFReturns %>% select(date, Ticker, Return),
+    SAData_Returns %>% select(date, Ticker, Return)
+  )
 
-
-## merging data
-
-
-
+## Add USDZAR
 
 # Stratification ----------------------------------------------------------
 Df <-
