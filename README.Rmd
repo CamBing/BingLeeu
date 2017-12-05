@@ -4,9 +4,9 @@ output: html_document
 ---
 
 # COMMIT SUMMARY
-We have updated the code, thank you for your help Nico. We now need the USDZAR:CUR data (as suggested by you). We have also started with the stratification. We are struggling to understand it, but the code works. Please see questions in the relevant section.
+We have updated the code, thank you for your help Nico. We have tarted with the stratification. We are struggling to understand it, but the code works. Please see questions in the relevant section.
 
-We have made a start compiling the DCC and regression code from the tuts.
+We have compiled the code for running multiple regressions. We have some questions (which follow the relevant section below)
 
 
 # Aim
@@ -15,9 +15,7 @@ The aim of this paper is to find the best hedge for a Rand depreciation
 
 # Techniques used
 
-We will most probably use DCC modelling
-Maybe also eGARCH modelling, to compare the results to that of the DCC model
-
+We will use a parametric (DCC) and a non-parametric measure of a hedge (stratifying the data set)
 
 # NICO: Remember what I said in class - have a parametric (DCC) and also a non-parametric measure of a hedge (stratifying your data set)
 
@@ -38,14 +36,19 @@ etfs <-
 
 data_original <-
   readRDS("data/SA_Rand_Returns.rds")
+
+spots <-
+  readRDS("data/Spots.rds")
+
 ```
 
 
 After this, we calculated the returns and merged data
+QUESTION: NICO: Please can you check how I calculated returns for usdzar.
 
 ```{r Calculating returns and merging datasets}
 
-N_Capping <- 80 # Parameter that trims the universe set - won't be of much practical use if an obscure and small and thinly traded stock is a great hedge. Focus, e.g., on the top 80 stocks by Market Cap.
+N_Capping <- 80 # Parameter that trims the universe set. Focus, e.g., on the top 80 stocks by Market Cap.
 
 ETFReturns <-
 etfs %>% group_by(Ticker) %>% 
@@ -61,6 +64,14 @@ data_original %>%
   arrange(date, Market.Cap) %>% 
   top_n(N_Capping, "Market.Cap") %>% ungroup()
 
+# Caluclating returns for USDZAR:
+
+usdzar <- 
+  spots %>% group_by(Spot) %>% 
+  mutate(Return = Value/lag(Value)-1) %>%  
+  filter(Spot == "ZAR_Spot") %>% 
+  ungroup()
+
 # And here's how to look at cumulative returns for e.g. Naspers:
 
 SAData_Returns %>% filter(Ticker == "NPN SJ Equity") %>% mutate(cumret = cumprod(1+Return)*100) %>% ggplot() + geom_line(aes(date, cumret))
@@ -68,12 +79,11 @@ SAData_Returns %>% filter(Ticker == "NPN SJ Equity") %>% mutate(cumret = cumprod
 
 # Merging datasets:
 mergeddataset <- 
-bind_rows(
-  ETFReturns %>% select(date, Ticker, Return),
-  SAData_Returns %>% select(date, Ticker, Return)
-  )# Assuming you don't want to look at sector levels..
-  
-# Is this what you are looking for? Yes, thank you
+  bind_rows(
+    ETFReturns %>% select(date, Ticker, Return),
+    SAData_Returns %>% select(date, Ticker, Return),
+    usdzar %>% rename("Ticker" = Spot) %>% select(date, Ticker, Return)
+  )
 
 ```
 
@@ -114,6 +124,64 @@ LowDates <- df_Strat
 
 ```
 
+# Regression Time
+
+Code for this section follows in 'code/regressions.R'. Need to run 'code/data_prep.R' to get mergeddataset. Could we make this more efficient?
+
+```{r Regressions}
+# First off... -------------------------------------------------------------
+#   Need to run 'code/data_prep.R' to obtain the mergeddataset
+
+Regression_data <-   mergeddataset
+
+# Packages ----------------------------------------------------------------
+library(rmsfuns)
+packages_reg <- c("broom")
+load_pkg(packages_reg)
+
+# REGRESSION ANALYSIS
+# Running multiple regressions --------------------------------------------
+
+zar_spot <- 
+  Regression_data %>% 
+  filter(Ticker == "ZAR_Spot")
+
+Regressions <- 
+  Regression_data %>%
+  group_by(Ticker) %>% 
+  do(reg = lm(Return ~ (Return), data = .)) ##*THIS IS WHAT MY QUESTION REFERS TO*## 
+
+RegressionCoeffs <- 
+  Regressions %>% tidy(reg)
+
+head(RegressionCoeffs)
+
+
+# Tidy output for the paper -----------------------------------------------
+
+load_pkg("huxtable")
+
+variable.names <- unique(Regression_data$Ticker, incomparables = FALSE) #**** WHAT SHOULD WE INCLUDE HERE? LEEU? - this includes ALL of our tickers  ****
+
+Title <- "Regression Table"
+
+ #*** This takes a while to run (1-2 mins)
+ht <- 
+  huxreg(Regressions %>% filter(Ticker %in% variable.names ) %>% 
+           select(reg) %>% .[[1]], 
+         statistics = c(N = "nobs", R2 = "r.squared"), 
+         note = "%stars%." )
+
+for(i in 1:ncol(ht)) {
+  ht[1,][[1+i]] <- variable.names[i]  
+}
+
+ht %>% 
+  set_caption(Title)
+```
+QUESTIONS:
+\item What exactly should be regressed? (see comment in code above)
+\item What are our variables of interest? All tickers? (see comment in code above)
 
 
 # Miscellaneous Notes

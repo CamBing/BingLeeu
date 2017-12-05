@@ -15,6 +15,9 @@ etfs <-
 data_original <-
   readRDS("data/SA_Rand_Returns.rds")
 
+spots <-
+  readRDS("data/Spots.rds")
+
 ## Calculating returns for ETFs
 
 N_Capping <- 80 # Parameter that trims the universe set - won't be of much practical use if an obscure and small and thinly traded stock is a great hedge. Focus, e.g., on the top 80 stocks by Market Cap.
@@ -34,12 +37,19 @@ SAData_Returns <-
   top_n(N_Capping, "Market.Cap") %>% ungroup()
 
 
-
+usdzar <- 
+  spots %>% group_by(Spot) %>% 
+  mutate(Return = Value/lag(Value)-1) %>%  
+  filter(Spot == "ZAR_Spot") %>% 
+  ungroup()
+  
+  
 # Merging datasets:
 mergeddataset <- 
   bind_rows(
     ETFReturns %>% select(date, Ticker, Return),
-    SAData_Returns %>% select(date, Ticker, Return)
+    SAData_Returns %>% select(date, Ticker, Return),
+    usdzar %>% rename("Ticker" = Spot) %>% select(date, Ticker, Return)
   )
 
 ## Add USDZAR
