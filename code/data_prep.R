@@ -39,7 +39,7 @@ SAData_Returns <-
 
 usdzar <- 
   spots %>% group_by(Spot) %>% 
-  mutate(Return = Value/lag(Value)-1) %>%  
+  mutate(Return = Value/lag(Value)-1) %>%  ##*** IS THIS CORRECT? *** ##  
   filter(Spot == "ZAR_Spot") %>% 
   ungroup()
   
@@ -52,7 +52,6 @@ mergeddataset <-
     usdzar %>% rename("Ticker" = Spot) %>% select(date, Ticker, Return)
   )
 
-## Add USDZAR
 
 # Stratification ----------------------------------------------------------
 Df <-

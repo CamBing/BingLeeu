@@ -1,21 +1,24 @@
-# Code from tuts for DCC
-
 # Packages ----------------------------------------------------------------
 library(rmsfuns)
 load_pkg("MTS")
 load_pkg(c("devtools", "rugarch", "forecast", "tidyr", 
            "tbl2xts", "lubridate", "readr", "PerformanceAnalytics", 
-           "ggplot2", "dplyr", "ggthemes"))
+           "ggplot2", "dplyr", "ggthemes", "robustbase"))
+
+
+# Data --------------------------------------------------------------------
+
+dailydata <- mergeddataset
 
 
 # MV Conditional Heteroskedasticity tests ---------------------------------
+# *** Cannot get out code to work here
+# dlog returns: 
 
-## Calculating returns and cleaning
-
-# dlog returns:
 rtn <- (
-  diff( log(dailydata %>% arrange(Date) %>% tbl_xts()), lag=1)
+  diff( log(dailydata %>% arrange(date) %>% tbl_xts()), lag=1)
 )*100
+
 
 #drop the first observation and corresponding date:
 rtn <- rtn[-1,]
@@ -26,20 +29,18 @@ colnames(rtn) <-
   colnames(rtn) %>% gsub("JSE.","",.) %>% gsub(".Close","",.)
 
 # And clean it using Boudt's technique:
-rtn <- Return.clean(rtn, method = c("none", "boudt", "geltner")[2], alpha = 0.01)
+rtn <- PerformanceAnalytics::Return.clean(rtn, method = c("none", "boudt", "geltner")[2], alpha = 0.01)
 
 ## Running the MV Conditional Heteroskedasticity test
 MarchTest(rtn)
 
 
+#******************* WE GOT THIS FAR AND GOT STUCK. REST IS COPY & PASTE FROM TUT 7 ***************
+
+
+
 # Fitting DCC -------------------------------------------------------------
 
-# dccPre fits the univariate GARCH models to each series in our data frame of returns.
-# Let's select a VAR order of zero for the mean equation, and simply use the mean of each series.
-# The mean equation is thus in our case simply: Rtn_t = mean(R) + et
-
-# Then, for every series, a standard univariate GARCH(1,1) is run - giving us:
-# et and sigmat, which is then used to calculate the standardized resids, zt, which is used in DCC calcs after.
 DCCPre <- dccPre(rtn/100, include.mean = T, p = 0)
 
 # If you want to fit other univariate garch models for each series, use the fGarch package to do so.
