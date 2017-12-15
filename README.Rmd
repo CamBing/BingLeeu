@@ -201,6 +201,8 @@ load_pkg(packages_reg)
 
 # Data prep ---------------------------------------------------------------
 
+# NicoCOmment: Of course you need to remove ZAR from your Ticker list, otherwise you are regressing ZAR on ZAR.
+
 zar <- usdzar %>% select("date" , "Return") %>% rename("usdzar_spot" = Return) 
 
 Regression_data <- 
