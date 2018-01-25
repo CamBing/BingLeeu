@@ -30,6 +30,9 @@ First we loaded the data ReturnsData and ETFs, respectively.
 
 ```{r Code for loading data}
 library(tidyverse)
+# NicoCOmment: add all the needed libraries!
+library(rmsfuns)
+library(lubridate)
 
 etfs <-
   readRDS("data/AllFunds.rds") %>% tbl_df()
@@ -37,14 +40,22 @@ etfs <-
 data_original <-
   readRDS("data/SA_Rand_Returns.rds")
 
+
 spots <-
   readRDS("data/Spots.rds")
 
+# NicoCOmment: You've not picked up that there remains weekends in this data file. Try and be sharp in your analysis - this study has potential but I need to be able to trust your work.
+# I've done this in a tut before:
+spots <- 
+  spots %>% 
+  mutate(Days = format(date, "%A")) %>% filter(!Days %in% c("Saturday", "Sunday") ) %>% select(-Days)
+  
 ```
 
 
 After this, we calculated the returns and merged data
 QUESTION: NICO: Please can you check how I calculated returns for usdzar.
+NicoCOmment: Calculated Correctly.
 
 ```{r Calculating returns and merging datasets}
 
@@ -93,6 +104,9 @@ mergeddataset <-
 
 QUESTION: The values created (under Df) - what are they based on/how are they genereated? We are just not sure where they come from, seeing as there is only dates in the function. 
 
+NicoCOmment: Guys, seriously - I created Df below as an illustration. You are supposed to replace Df below with ZAR. You need to take the project and make it your own - I cannot do everything. See below.
+
+
 ```{r Stratification}
 Df <-
   data.frame(
@@ -115,11 +129,56 @@ df_Strat <-
 HighDates <- df_Strat
 LowDates <- df_Strat
 
+
 # Now use these dates to truncate your sample in order to reflect your strata of choice.
 
 # E.g., in your regression function:
 
 # df %>% filter(date %in% HighDates) %>% ...  
+
+
+
+
+
+
+# NicoCOmment: This is how to use the above.
+
+Df <- 
+  usdzar %>% select(date, Return) %>% filter(date > first(date))
+
+StratValue1 <- 0.2 # Change threshold
+StratValue2 <- 0.8 # Change threshold
+
+df_Strat <- 
+  Df %>% 
+  mutate(Q1 = quantile(Return, StratValue1, na.rm = TRUE), Q2 = quantile(Return, StratValue2, na.rm = TRUE)) %>% 
+  mutate(ID = ifelse(Return <= Q1, "Low", 
+                     ifelse(Return > Q1 & Return <= Q2 , "Medium",
+                            ifelse(Return > Q2 , "High", "NA")) )) %>% ungroup() 
+
+
+
+HighDates <- df_Strat %>% filter(ID == "High") %>% pull(date)
+LowDates <- df_Strat %>% filter(ID == "Low") %>% pull(date)
+
+
+# And now you can do the following e.g.:
+Regression_data <-   mergeddataset
+
+Regression_data %>% filter(date %in% HighDates)
+
+
+# AGAIN: THIS IS ONLY an illustration. Use and tailor this to fit your own methodology - be creative in thinking how to use this. E.g., you might consider working with weekly returns after a high ZAR movement / weekly movement, or the day after a high return movement (the latter would require lagging your stock / ETF returns).
+
+# I don't want to prescribe (this is ultimately your project) but think along the lines of:
+
+# Returns day after high ZAR move - measures most immediately sensitive to ZAR movement.
+
+# You could also use the return a week's return after a high currency movement (week movement).
+
+# E.g. you could use the fornmat function above (used to trim out weekends) to calculate returns on a week to week basis (filter Days == "Wednesday" e.g.) and then look at ZAR movement's impact on same week stock movement. Here you won't lag.
+
+# Please guys, let your mind go on this.
 
 
 ```
@@ -142,10 +201,15 @@ load_pkg(packages_reg)
 
 # Data prep ---------------------------------------------------------------
 
+# NicoCOmment: Of course you need to remove ZAR from your Ticker list, otherwise you are regressing ZAR on ZAR.
+
 zar <- usdzar %>% select("date" , "Return") %>% rename("usdzar_spot" = Return) 
 
 Regression_data <- 
-  right_join(Regression_data, zar, by = "date")
+  right_join(Regression_data, zar, by = "date") %>% 
+  
+  filter(Ticker != "ZAR_Spot") %>% 
+  filter(!is.na(Return))
 
 
 
@@ -194,7 +258,8 @@ ht %>%
 
 ```
 QUESTIONS:
-\item What exactly should be regressed? (see comment in code above). We are struggling to get the usdzar as our dependent variable. We are not sure if the zar spot should form part of the returns column, or have its own (as we have done)
+
+\item What exactly should be regressed? (see comment in code above). We are struggling to get the usdzar as our dependent variable. We are not sure if the zar spot should form part of the returns column, or have its own (as we have done). _It is now correct._
 
 # DCC
 Here, we are struglling to get going. 
@@ -213,6 +278,7 @@ dailydata <- mergeddataset
 # *** Cannot get out code to work here
 # dlog returns: 
 
+# NicoComment: SERIOUSLY guys, you are better than this. Below you are taking the dlog return of a return series...?! Just keep it in simple returns. 
 rtn <- (
   diff( log(dailydata %>% arrange(date) %>% tbl_xts()), lag=1)
 )*100
