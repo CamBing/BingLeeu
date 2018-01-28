@@ -1,9 +1,4 @@
----
-title: "README"
-output: html_document
----
-
-```{r library}
+# Libraries ---------------------------------------------------------------
 library(tidyverse)
 library(rmsfuns)
 library(lubridate)
@@ -11,48 +6,20 @@ library(broom)
 library(rugarch)
 library(rmgarch)
 library(tbl2xts)
-```
- 
+library(MTS)
 
-
-# Aim
-
-The aim of this paper is to find the best hedge for a Rand depreciation
-
-# Techniques used
-
-We will use a parametric (DCC) and a non-parametric measure of a hedge (stratifying the data set)
-
-# Data
-
-## Data Prep
-
-First we loaded the data ReturnsData and ETFs.
-
-```{r Code for loading data}
-
-
+# Loading data ------------------------------------------------------------
 etfs <-
   readRDS("data/AllFunds.rds") %>% tbl_df()
 
 data_original <-
   readRDS("data/SA_Rand_Returns.rds")
 
-
 spots <-
-  readRDS("data/Spots.rds")
-
-# Removing weekends
-spots <- 
-  spots %>% 
+  readRDS("data/Spots.rds") %>% 
   mutate(Days = format(date, "%A")) %>% filter(!Days %in% c("Saturday", "Sunday") ) %>% select(-Days)
-  
-```
 
-
-After this, we calculated the (simple) returns (to match the AllFunds data) and merged data
-
-```{r Calculating returns and merging datasets}
+# Merging and Calculating returns -----------------------------------------------------
 
 N_Capping <- 30 # Parameter that trims the universe set. Focus, e.g., on the top 80 stocks by Market Cap.
 
@@ -87,14 +54,8 @@ mergeddataset <-
     usdzar %>% rename("Ticker" = Spot) %>% select(date, Ticker, Return)
   )
 
-```
 
-# Stratification
-
-## Stratifying our data
-This is the code we will use to stratify our data
-
-```{r Stratification}
+# Stratification ----------------------------------------------------------
 
 Df <- 
   usdzar %>% select(date, Return) %>% filter(date > first(date))
@@ -121,14 +82,21 @@ Regression_data <-   mergeddataset
 Regression_data %>% filter(date %in% HighDates)
 
 
+# AGAIN: THIS IS ONLY an illustration. Use and tailor this to fit your own methodology - be creative in thinking how to use this. E.g., you might consider working with weekly returns after a high ZAR movement / weekly movement, or the day after a high return movement (the latter would require lagging your stock / ETF returns).
 
-```
+# I don't want to prescribe (this is ultimately your project) but think along the lines of:
 
-# Regression Time
+# Returns day after high ZAR move - measures most immediately sensitive to ZAR movement.
 
-Code for this section follows in 'compiled code.R' to get mergeddataset. 
+# You could also use the return a week's return after a high currency movement (week movement).
 
-```{r Regressions}
+# E.g. you could use the fornmat function above (used to trim out weekends) to calculate returns on a week to week basis (filter Days == "Wednesday" e.g.) and then look at ZAR movement's impact on same week stock movement. Here you won't lag.
+
+# Please guys, let your mind go on this.
+
+
+
+# Regression approach --------------------------------------------------------------
 zar <- usdzar %>% select("date" , "Return") %>% rename("usdzar_spot" = Return) 
 
 Regression_data <- 
@@ -153,9 +121,8 @@ RegressionCoeffs <-
 
 head(RegressionCoeffs)
 
-# Table of best -> worst headges
 hedges <- RegressionCoeffs %>%  filter(., term == "Return") %>% select(., Ticker, estimate) %>% arrange(., desc(estimate))
-
+#***** ^^ Try put into table ^^ ********
 
 
 # Tidy output for the paper 
@@ -182,18 +149,7 @@ ht %>%
   set_caption(Title)
 
 
-
-
-```
-QUESTIONS:
-
-# DCC
-QUESTIONS:
-\item Can't calculate the dlog returns
-\item Below is a bunch of code I tried. Has not changed the resulting error when running multifit(). Takes about 15 minutes to run, the returns an error: [Error in checkForRemoteErrors(val) : 
-  one node produced an error: no applicable method for 'convergence' applied to an object of class "try-error"]. Cannot find a solution online that is relevant to what we are doing.
-
-```{r DCC}
+# DCC (flexible specs) ----------------------------------------------------
 
 # Univariate GARCH specifications
 rtn <- SAData_Returns %>% tbl_xts(.)
@@ -220,12 +176,11 @@ cl = makePSOCKcluster(10)
 multf = multifit(multi_univ, rtn, cluster = cl)  # This takes a while to run (15 mins)
 
 
-# **************
-# Attempt no. 2
-# **************
 
 
-test.2 <- SAData_Returns %>%  filter(Ticker != "BAT SJ Equity") %>% rename("Date" = date) %>% select(Date, Ticker, Return)
+
+
+jmsp <- SAData_Returns %>%  filter(Ticker != "BAT SJ Equity") %>% rename("Date" = date) %>% select(Date, Ticker, Return)
 DCCPre <- dccPre(jmsp, include.mean = T, p = 0)
 
 
@@ -267,26 +222,4 @@ cl = makePSOCKcluster(10)
 # This did not work:
 # Building DCC model
 multf = multifit(multi_univ, testing, cluster = cl)  # This takes a while to run (15 mins)
-
-```
- 
-
-
-# Miscellaneous Notes
-
-
-***
-
-# Paper
-
-## Introduction
-
-## Methodology
-
-## Literature Review
-
-## Results
-
-## Conclusion
-
 

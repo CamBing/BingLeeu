@@ -12,10 +12,13 @@ load_pkg(packages_reg)
 
 # Data prep ---------------------------------------------------------------
 
+
 zar <- usdzar %>% select("date" , "Return") %>% rename("usdzar_spot" = Return) 
 
 Regression_data <- 
-  right_join(Regression_data, zar, by = "date")
+  right_join(Regression_data, zar, by = "date") %>% 
+  filter(Ticker != "ZAR_Spot") %>% # Removing zar to avoid regressing zar on zar
+  filter(!is.na(Return))
 
 
 
@@ -28,7 +31,7 @@ head(Regression_data)
 Regressions <- 
   Regression_data %>%
   group_by(Ticker) %>% 
-  do(reg = lm(usdzar_spot ~ (Return), data = .)) ##*THIS IS WHAT MY QUESTION REFERS TO*## 
+  do(reg = lm(usdzar_spot ~ (Return), data = .)) 
 
 RegressionCoeffs <- 
   Regressions %>% tidy(reg)
@@ -58,6 +61,4 @@ for(i in 1:ncol(ht)) {
 
 ht %>% 
   set_caption(Title)
-
-
 

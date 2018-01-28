@@ -8,17 +8,7 @@ load_pkg(c("devtools", "rugarch", "forecast", "tidyr",
 
 # Data --------------------------------------------------------------------
 
-dailydata <- mergeddataset
-
-
-# MV Conditional Heteroskedasticity tests ---------------------------------
-# *** Cannot get out code to work here
-# dlog returns: 
-
-rtn <- (
-  diff( log(dailydata %>% arrange(date) %>% tbl_xts()), lag=1)
-)*100
-
+rtn <- Regression_data
 
 #drop the first observation and corresponding date:
 rtn <- rtn[-1,]
@@ -31,11 +21,21 @@ colnames(rtn) <-
 # And clean it using Boudt's technique:
 rtn <- PerformanceAnalytics::Return.clean(rtn, method = c("none", "boudt", "geltner")[2], alpha = 0.01)
 
+# MV Conditional Heteroskedasticity tests ---------------------------------
+
+
+
+
 ## Running the MV Conditional Heteroskedasticity test
 MarchTest(rtn)
 
+# *************************************************************************************************
+# *************************************************************************************************
+# ****************** WE GOT THIS FAR AND GOT STUCK. REST IS COPY & PASTE FROM TUT 7 ***************
+# *************************************************************************************************
+# *************************************************************************************************
+# *************************************************************************************************
 
-#******************* WE GOT THIS FAR AND GOT STUCK. REST IS COPY & PASTE FROM TUT 7 ***************
 
 
 
