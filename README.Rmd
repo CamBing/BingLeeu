@@ -87,6 +87,16 @@ mergeddataset <-
     usdzar %>% rename("Ticker" = Spot) %>% select(date, Ticker, Return)
   )
 
+
+# Dlog Returns:
+mergeddataset <- 
+mergeddataset %>% arrange(date) %>% group_by(Ticker) %>% mutate(Return = coalesce(Return, 0)) %>% 
+  mutate(Index = cumprod(1+Return) ) %>% 
+  mutate(DlogReturn =  log(Index) - log( lag(Index))) %>% ungroup() %>% 
+  mutate(DlogReturn = coalesce(DlogReturn, 0)) %>% select(-Index)
+
+# Now choose which you want to use.
+
 ```
 
 # Stratification
