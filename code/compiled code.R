@@ -7,6 +7,7 @@ library(rugarch)
 library(rmgarch)
 library(tbl2xts)
 library(MTS)
+library(PerformanceAnalytics)
 
 # Loading data ------------------------------------------------------------
 etfs <-
@@ -20,6 +21,7 @@ spots <-
   mutate(Days = format(date, "%A")) %>% filter(!Days %in% c("Saturday", "Sunday") ) %>% select(-Days)
 
 # Merging and Calculating returns -----------------------------------------------------
+
 
 N_Capping <- 30 # Parameter that trims the universe set. Focus, e.g., on the top 80 stocks by Market Cap.
 
@@ -54,6 +56,15 @@ mergeddataset <-
     usdzar %>% rename("Ticker" = Spot) %>% select(date, Ticker, Return)
   )
 
+
+# Dlog Returns:
+mergeddataset <- 
+  mergeddataset %>% arrange(date) %>% group_by(Ticker) %>% mutate(Return = coalesce(Return, 0)) %>% 
+  mutate(Index = cumprod(1+Return) ) %>% 
+  mutate(DlogReturn =  log(Index) - log( lag(Index))) %>% ungroup() %>% 
+  mutate(DlogReturn = coalesce(DlogReturn, 0)) %>% select(-Index)
+
+# Now choose which you want to use.
 
 # Stratification ----------------------------------------------------------
 
@@ -97,6 +108,8 @@ Regression_data %>% filter(date %in% HighDates)
 
 
 # Regression approach --------------------------------------------------------------
+Regression_data <-   mergeddataset
+
 zar <- usdzar %>% select("date" , "Return") %>% rename("usdzar_spot" = Return) 
 
 Regression_data <- 
@@ -149,77 +162,84 @@ ht %>%
   set_caption(Title)
 
 
+
 # DCC (flexible specs) ----------------------------------------------------
 
 # Univariate GARCH specifications
-rtn <- SAData_Returns %>% tbl_xts(.)
+
+# Previously you were not using spread_by explicitly:
+rtn <- 
+  mergeddataset %>% # Orginally done by Nico with SAData_Returns
+  select(date, Ticker, DlogReturn) %>% 
+  filter(date >= "2002-01-01") %>% 
+  tbl_xts(., spread_by = "Ticker")
+
+# This is key. You cannot run the DCC with NAs...
+rtn[is.na(rtn)] <- 0 
+
+
 
 uspec <-
   ugarchspec(variance.model = list(model = "gjrGARCH", garchOrder = c(1, 1)), 
              mean.model = list(armaOrder = c(1,0), include.mean = TRUE),
              distribution.model = "sstd")
 
-multi_univ <- multispec(replicate(ncol(rtn), uspec))
+multi_univ_garch_spec <- multispec(replicate(ncol(rtn), uspec))
 
-spec.dcc = dccspec(multi_univ, 
+spec.dcc = dccspec(multi_univ_garch_spec, 
                    dccOrder = c(1, 1), 
                    distribution = 'mvnorm',
                    lag.criterion = c("AIC", "HQ", "SC", "FPE")[1],
                    model = c("DCC", "aDCC")[1]) # Change to aDCC e.g.
 
-# D) Enable clustering for speed:
+
 cl = makePSOCKcluster(10)
 
 
-# This did not work:
 # Building DCC model
-multf = multifit(multi_univ, rtn, cluster = cl)  # This takes a while to run (15 mins)
+# This takes a while to run (15 mins)
+multf = multifit(multi_univ_garch_spec, rtn, cluster = cl)  
+
+#== === === === === === === === ===  === === === === === === === === === ===
+# Not working here:
+#== === === === === === === === === === === === === === === === === === ===
+# Now we can use multf to estimate the dcc model using our dcc.spec:
+fit.dcc = dccfit(spec.dcc, 
+                data = rtn, 
+                solver = 'solnp', 
+                cluster = cl, 
+                fit.control = list(eval.se = FALSE), 
+                fit = multf)
+# Returns the following error:
+# Error in -x@fit$log.likelihoods : invalid argument to unary operator
+#== === === === === === === === === === === === === === === === === === ===
 
 
 
+# We can now test the model's fit as follows:
+#   Let's use the covariance matrices to test the adequacy of MV model in fitting mean residual processes:
+RcovList <- rcov(fit.dcc) # This is now a list of the monthly covariances of our DCC model series.
+covmat = matrix(RcovList,nrow(rtn),ncol(rtn)*ncol(rtn),byrow=TRUE)
+mc1 = MCHdiag(rtn,covmat)
 
 
-
-jmsp <- SAData_Returns %>%  filter(Ticker != "BAT SJ Equity") %>% rename("Date" = date) %>% select(Date, Ticker, Return)
-DCCPre <- dccPre(jmsp, include.mean = T, p = 0)
-
-
-rtn <- Regression_data
-
-#drop the first observation and corresponding date:
+# DCC method 1 ------------------------------------------------------------
 rtn <- rtn[-1,]
 # Center the data:
 rtn <- scale(rtn,center=T,scale=F) 
 
 colnames(rtn) <- 
-  colnames(rtn) %>% gsub("JSE.","",.) %>% gsub(".Close","",.)
+  colnames(rtn) %>% gsub("",".",.)
 
 # And clean it using Boudt's technique:
-rtn <- PerformanceAnalytics::Return.clean(rtn, method = c("none", "boudt", "geltner")[2], alpha = 0.01)
+# takes a while to run (=<5 mins)
+rtn <- Return.clean(rtn, method = c("none", "boudt", "geltner")[2], alpha = 0.01) 
 
-## Another try ********************************************************************************
+#MV Conditional Heteroskedasticity tests
+MarchTest(rtn) 
 
-testing <- mergeddataset %>% mutate(Return = coalesce(Return, 0) ) #maybe drop tbl_xts
+#DCC
 
+DCCPre <- dccPre(rtn/100, include.mean = T, p = 0)
 
-uspec <-
-  ugarchspec(variance.model = list(model = "gjrGARCH", garchOrder = c(1, 1)), 
-             mean.model = list(armaOrder = c(1,0), include.mean = TRUE),
-             distribution.model = "sstd")
-
-multi_univ <- multispec(replicate(ncol(testing), uspec))
-
-spec.dcc = dccspec(multi_univ, 
-                   dccOrder = c(1, 1), 
-                   distribution = 'mvnorm',
-                   lag.criterion = c("AIC", "HQ", "SC", "FPE")[1],
-                   model = c("DCC", "aDCC")[1]) # Change to aDCC e.g.
-
-# D) Enable clustering for speed:
-cl = makePSOCKcluster(10)
-
-
-# This did not work:
-# Building DCC model
-multf = multifit(multi_univ, testing, cluster = cl)  # This takes a while to run (15 mins)
-
+  
