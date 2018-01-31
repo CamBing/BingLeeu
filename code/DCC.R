@@ -41,7 +41,7 @@ MarchTest(rtn)
 
 # Fitting DCC -------------------------------------------------------------
 
-DCCPre <- dccPre(rtn/100, include.mean = T, p = 0)
+DCCPre <- dccPre(rtn, include.mean = T, p = 0)
 
 # If you want to fit other univariate garch models for each series, use the fGarch package to do so.
 
