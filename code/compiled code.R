@@ -161,7 +161,7 @@ rtn <-
   select(date, Ticker, DlogReturn) %>% 
   filter(date >= StartDate) %>% 
   filter(Ticker %in% Tickers_To_Hold) %>% 
-  tbl_xts(., spread_by = "Ticker")
+  tbl_xts(., spread_by = "Ticker") #DELETE
 
 regression.data.final <-  mergeddataset %>% 
   select(date, Ticker, DlogReturn) %>% 
@@ -182,7 +182,7 @@ regression.data.final <-
 Regressions <- 
   regression.data.final %>%
   group_by(Ticker) %>% 
-  do(reg = lm(usdzar_spot ~ (DlogReturn), data = .)) 
+  do(reg = lm(DlogReturn ~ (usdzar_spot), data = .)) 
 
 RegressionCoeffs <- 
   Regressions %>% tidy(reg)
@@ -190,14 +190,14 @@ RegressionCoeffs <-
 head(RegressionCoeffs)
 
 hedges <- RegressionCoeffs %>%  
-  filter(., term == "DlogReturn") %>% 
+  filter(., term == "usdzar_spot") %>% 
   select(., Ticker, estimate) %>% 
   arrange(., desc(estimate))
 #***** ^^ Try put into table ^^ ********
 
 top.10.reg <-
   (RegressionCoeffs %>%  
-     filter(., term == "DlogReturn") %>% 
+     filter(., term == "usdzar_spot") %>% 
      select(., Ticker, estimate) %>% 
      arrange(., desc(estimate)))[1:10,]
 

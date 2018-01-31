@@ -1,4 +1,78 @@
-# Univariate GARCH specifications
+
+# Data set-up -------------------------------------------------------------
+
+# Libraries ---------------------------------------------------------------
+library(tidyverse)
+library(rmsfuns)
+library(lubridate)
+library(broom)
+library(rugarch)
+library(rmgarch)
+library(tbl2xts)
+library(MTS)
+library(PerformanceAnalytics)
+library(ggplot2)
+library(ggthemes)
+# Loading data ------------------------------------------------------------
+etfs <-
+  readRDS("data/AllFunds.rds") %>% tbl_df()
+
+data_original <-
+  readRDS("data/SA_Rand_Returns.rds")
+
+spots <-
+  readRDS("data/Spots.rds") %>% 
+  mutate(Days = format(date, "%A")) %>% filter(!Days %in% c("Saturday", "Sunday") ) %>% select(-Days)
+
+# Merging and Calculating returns -----------------------------------------------------
+
+
+N_Capping <- 80 # Parameter that trims the universe set. Focus, e.g., on the top 80 stocks by Market Cap.
+
+ETFReturns <-
+  etfs %>% group_by(Ticker) %>% 
+  rename("TRI" = TOT_RETURN_INDEX_NET_DVDS) %>% 
+  mutate(Return = TRI / lag(TRI)-1) %>% ungroup()
+
+SAData_Returns <-   
+  data_original %>% 
+  filter(Universe == "JALSHAll") %>% 
+  mutate(Return = coalesce(Return, 0) ) %>%   # To make NA's zero - check whether this fits in to your study / makes sense --> motivate.
+  ungroup() %>% select(date, Ticker, BICS_LEVEL_1_SECTOR_NAME, Market.Cap, Return) %>% 
+  group_by(date) %>% 
+  arrange(date, Market.Cap) %>% 
+  top_n(N_Capping, "Market.Cap") %>% ungroup()
+
+# Caluclating returns for USDZAR:
+
+usdzar <- 
+  spots %>% group_by(Spot) %>% 
+  mutate(Return = Value/lag(Value)-1) %>%  
+  filter(Spot == "ZAR_Spot") %>% 
+  ungroup()
+
+
+# Merging datasets:
+mergeddataset <- 
+  bind_rows(
+    ETFReturns %>% select(date, Ticker, Return),
+    SAData_Returns %>% select(date, Ticker, Return),
+    usdzar %>% rename("Ticker" = Spot) %>% select(date, Ticker, Return)
+  )
+
+
+# Dlog Returns:
+mergeddataset <- 
+  mergeddataset %>% arrange(date) %>% group_by(Ticker) %>% mutate(Return = coalesce(Return, 0)) %>% 
+  mutate(Index = cumprod(1+Return) ) %>% 
+  mutate(DlogReturn =  log(Index) - log( lag(Index))) %>% ungroup() %>% 
+  mutate(DlogReturn = coalesce(DlogReturn, 0)) %>% select(-Index)
+
+# Now choose which you want to use.
+
+
+# DCC ---------------------------------------------------------------------
+
 
 # Only hold stocks with a minimum amount of valid data:
 
@@ -41,6 +115,17 @@ rtn <-
 # This is key. You cannot run the DCC with NAs...
 rtn[is.na(rtn)] <- 0 
 
+# Doing this makes it work:
+#-- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+colnames(rtn) <- 
+  colnames(rtn) %>% gsub(" ",".",.)
+
+rtn <- rtn[-1,]
+
+rtn <- scale(rtn,center=T,scale=F) 
+
+
+#-- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
 
 uspec <-
   ugarchspec(variance.model = list(model = "gjrGARCH", garchOrder = c(1, 1)), 
@@ -57,6 +142,7 @@ spec.dcc = dccspec(multi_univ_garch_spec,
 
 
 cl = makePSOCKcluster(10)
+
 
 
 # Building DCC model
