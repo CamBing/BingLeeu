@@ -69,6 +69,187 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width 
 # Note: Include = FALSE implies the code is executed, but not printed in your pdf.
 # warning and message = FALSE implies ugly messages and warnings are removed from your pdf. These should be picked up when you execute the command chunks (code sections below) in your rmd, not printed in your paper!
 
+# Libraries ---------------------------------------------------------------
+library(tidyverse)
+library(rmsfuns)
+library(lubridate)
+library(broom)
+library(rugarch)
+library(rmgarch)
+library(tbl2xts)
+library(MTS)
+library(PerformanceAnalytics)
+library(ggplot2)
+library(ggthemes)
+# Loading data ------------------------------------------------------------
+etfs <-
+  readRDS("data/AllFunds.rds") %>% tbl_df()
+
+data_original <-
+  readRDS("data/SA_Rand_Returns.rds")
+
+spots <-
+  readRDS("data/Spots.rds") %>% 
+  mutate(Days = format(date, "%A")) %>% filter(!Days %in% c("Saturday", "Sunday") ) %>% select(-Days)
+
+# Merging and Calculating returns -----------------------------------------------------
+
+
+N_Capping <- 80 # Parameter that trims the universe set. Focus, e.g., on the top 80 stocks by Market Cap.
+
+ETFReturns <-
+  etfs %>% group_by(Ticker) %>% 
+  rename("TRI" = TOT_RETURN_INDEX_NET_DVDS) %>% 
+  mutate(Return = TRI / lag(TRI)-1) %>% ungroup()
+
+SAData_Returns <-   
+  data_original %>% 
+  filter(Universe == "JALSHAll") %>% 
+  mutate(Return = coalesce(Return, 0) ) %>%   # To make NA's zero - check whether this fits in to your study / makes sense --> motivate.
+  ungroup() %>% select(date, Ticker, BICS_LEVEL_1_SECTOR_NAME, Market.Cap, Return) %>% 
+  group_by(date) %>% 
+  arrange(date, Market.Cap) %>% 
+  top_n(N_Capping, "Market.Cap") %>% ungroup()
+
+# Caluclating returns for USDZAR:
+
+usdzar <- 
+  spots %>% group_by(Spot) %>% 
+  mutate(Return = Value/lag(Value)-1) %>%  
+  filter(Spot == "ZAR_Spot") %>% 
+  ungroup()
+
+
+# Merging datasets:
+mergeddataset <- 
+  bind_rows(
+    ETFReturns %>% select(date, Ticker, Return),
+    SAData_Returns %>% select(date, Ticker, Return),
+    usdzar %>% rename("Ticker" = Spot) %>% select(date, Ticker, Return)
+  )
+
+
+# Dlog Returns:
+mergeddataset <- 
+  mergeddataset %>% arrange(date) %>% group_by(Ticker) %>% mutate(Return = coalesce(Return, 0)) %>% 
+  mutate(Index = cumprod(1+Return) ) %>% 
+  mutate(DlogReturn =  log(Index) - log( lag(Index))) %>% ungroup() %>% 
+  mutate(DlogReturn = coalesce(DlogReturn, 0)) %>% select(-Index)
+
+# Now choose which you want to use.
+
+# Regression approach --------------------------------------------------------------
+Regression_data <-   mergeddataset %>% select("date", "Ticker", "DlogReturn")
+
+
+#zar <- usdzar %>% select("date" , "Return") %>% rename("usdzar_spot" = Return) 
+
+zar <- mergeddataset %>% 
+  filter(Ticker == "ZAR_Spot")%>%
+  select("date", "DlogReturn")  %>% 
+  rename("usdzar_spot" = DlogReturn)
+
+Regression_data <- 
+  right_join(Regression_data, zar, by = "date") %>% 
+  filter(Ticker != "ZAR_Spot") %>% 
+  filter(!is.na(DlogReturn))
+
+#== === === === === === === === === === === === === === ===
+# TRIM THE REGRESSION DATA!!
+# Do this now or after it has been run for the DCC
+#== === === === === === === === === === === === === === ===
+Pct_Valid <- 0.9  # This can change of course. 70% valid data over period at least
+StartDate <- ymd(20050101)
+EndDate <- ymd(20171031)
+
+mergeddataset <- 
+  mergeddataset %>% filter(date >= StartDate & date <= EndDate) #trimming dates covered
+
+mergeddataset[is.na(mergeddataset)] <- 0 # (Added) replace NAs in mergeddata
+
+NDates <- length(unique(mergeddataset %>% pull(date)) ) 
+
+Tickers_Active_At_Last <- 
+  mergeddataset %>% 
+  select(date, Ticker, DlogReturn) %>% 
+  filter(date >= ymd(20171001)) %>% # checking if valid at most recent date 
+  group_by(Ticker) %>% 
+  mutate(N_Valid = ifelse(DlogReturn == 0, 0, 1) ) %>% 
+  summarise(S = sum(N_Valid)) %>% 
+  filter(S >0) %>% pull(Ticker)
+
+Tickers_To_Hold <- 
+  mergeddataset %>% 
+  select(date, Ticker, DlogReturn) %>% 
+  filter(Ticker %in% Tickers_Active_At_Last) %>% 
+  group_by(Ticker) %>% 
+  mutate(N_Valid = ifelse(DlogReturn == 0, 0, 1) ) %>% summarise(N_Valid_Pct = sum(N_Valid)/NDates) %>% 
+  filter(N_Valid_Pct >= Pct_Valid) %>% pull(Ticker) %>% unique()
+
+
+regression.data.final <-  mergeddataset %>% 
+  select(date, Ticker, DlogReturn) %>% 
+  filter(date >= StartDate) %>% 
+  filter(Ticker %in% Tickers_To_Hold) 
+
+regression.data.final[is.na(regression.data.final)] <- 0 
+
+regression.data.final <- 
+  right_join(regression.data.final, zar, by = "date") %>% 
+  filter(Ticker != "ZAR_Spot") %>% 
+  filter(!is.na(DlogReturn))
+
+#== === === === === === === === === ===
+# REGRESSION ANALYSIS (NEW)
+#== === === === === === === === === ===
+
+Regressions <- 
+  regression.data.final %>%
+  group_by(Ticker) %>% 
+  do(reg = lm(DlogReturn ~ (usdzar_spot), data = .)) 
+
+RegressionCoeffs <- 
+  Regressions %>% tidy(reg)
+
+head(RegressionCoeffs)
+
+hedges <- RegressionCoeffs %>%  
+  filter(., term == "usdzar_spot") %>% 
+  select(., Ticker, estimate) %>% 
+  arrange(., desc(estimate))
+#***** ^^ Try put into table ^^ ********
+
+top.10.reg <-
+  (RegressionCoeffs %>%  
+     filter(., term == "usdzar_spot") %>% 
+     select(., Ticker, estimate) %>% 
+     arrange(., desc(estimate)))[1:10,]
+
+# Tidy output for the paper 
+
+load_pkg("huxtable")
+
+variable.names <- unique(Regression_data$Ticker, incomparables = FALSE) #**** WHAT SHOULD WE INCLUDE HERE? LEEU?  ****
+
+Title <- "Regression Table"
+
+
+ht <- 
+  huxreg(Regressions %>% filter(Ticker %in% variable.names ) %>% 
+           select(reg) %>% .[[1]], 
+         statistics = c(N = "nobs", R2 = "r.squared"), 
+         note = "%stars%." )
+
+#*** This takes a while to run (1-2 mins)
+for(i in 1:ncol(ht)) {
+  ht[1,][[1+i]] <- variable.names[i]  
+}
+
+ht %>% 
+  set_caption(Title)
+
+
+
 ```
 
 
@@ -77,6 +258,8 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width 
 <!-- ############################## -->
 
 # Introduction \label{Introduction}
+
+\pagebreak
 
 # Literature Review \label{Lit_Review}
 
@@ -87,8 +270,21 @@ There exists a vast international literature on the practical application of stu
 The ability to understand and predict the temporal dependence in the second-order moments and to control for the second-order temporal persistence of asset returns, has various financial econometric applications [@bauwens2006]. @kennedy2016 state that increased exchange rate volatility leads to a statistically significant, positive impact on the volatility of stock market returns when the main sources of financial volatility are controlled for. The findings of @baur2010, who analysed the time-varying correlations between gold and a collection of other assets in Germany, the UK and US, suggest that gold serves as a safe haven for equities in all of these countries. @ciner2013 employed a DCC model with GARCH specification in order to determine the hedging ability of multiple assets against the British pound and US dollar. Their findings suggest that gold serves as a potential hedge against exchange rate volatility for both of these two currencies. 
 
 
+
+\pagebreak
+
 # Data \label{Data}
 
+
+The data set used in this study includes the daily closing prices of an array of equties and ETFs which are traded and easily accessible to investors on the Johannesburg Stock Exchange. The top `r N_Capping` stocks, as measured by total market cap, which traded on at least 90\% of days between 01/01/2005 and 31/10/2017 were included in the analysis. Furthermore, an additional `r length(unique(etfs %>% pull(Ticker))) ` ETFs were included. This was then trimmed to include those ETFs which traded on at least 90\% of the aforementioned period. A full list of the assets covered in this analysis can be found in section \ref{appendix} in table \ref{cover}. In addition to these variables, the ZAR/USD exchange rate is included to be used as our variable of interest.
+
+The continuously compounded daily sector returns are then calculated by taking the log difference of each index series, as:
+
+\begin{align}
+r _ { i ,t } = \operatorname{ln} ( \frac { p _ { i } ,t } { p _ { i ,t - 1} } ) * 100 
+\end{align}
+
+where $p_t$ represents the closing index price of asset $i$ at time $t$. Taking the first difference of these return series is then imposed to remove the unit root process evident in the data. This data is then used in the analysis which follows. 
 
 
 ```{r Figure1, warning =  FALSE, fig.align = 'center', fig.cap = "Caption Here \\label{Figure1}", fig.ext = 'png', fig.height = 3, fig.width = 6}
@@ -96,6 +292,9 @@ The ability to understand and predict the temporal dependence in the second-orde
 
 ```
 
+
+
+\pagebreak
 
 #  Methodology
 This study employs two methodologies to investigate which JSE-listed financial instruments provide the best hedge against volatility in the Rand exchange rate. The first method utilised is a regression model (\ref{regression}), following which a Dynamic Conditional Correlation (DCC) model \ref{dcc} is used to investigate time-varying corellations between various JSE-listed instruments and the Rand/US Dollar exchange rate. 
@@ -118,18 +317,85 @@ Return_t = \beta_0 + \beta_1 R.pos.vol_t + \beta_2 R.neg.vol_t + \epsilon_t \lab
 
 where $R.pos.vol_t$ and $R.neg.vol_t$ refer to dates where the Rand exchange rate experienced periods of high positive and negative volotility, repectively. The distinction between times of high and relatively low volatility is important as this study's findings will be most relevant to investors in times of high unstability in the Rand. Furthermore, it allows us to minimize noise in the study which may drive nonsensical results.
 
+\pagebreak
+
 ## DCC Model
 
-This study utilises DCC Multivariate Generalized Autoregressive Conditional Heteroskedasticity (MV-GARCH) to isolate the time-varying conditional correlations between an array of JSE-listed stocks and ETFs. This technique offers a parsimonious approach to MV colatility modelling by relaxing the constraint of a fixed correlation structure which imposed in other modelling techniques. The results of which allow us to study whether fluctuations in the Rand exchange rate influence the aforementioned financial instruments. This information can then be reinterpreted as an indication of the best hedging options available to investors in the South African market. In contrast to the regression model, as described in section \ref{regression}, this method allows us to assess the dynamic hedging potential of the assets covered in our data set. 
+This study utilises a DCC Multivariate Generalized Autoregressive Conditional Heteroskedasticity (MV-GARCH) approach to isolate the time-varying conditional correlations between an array of JSE-listed stocks and ETFs. This technique offers a parsimonious approach to MV colatility modelling by relaxing the constraint of a fixed correlation structure which imposed in other modelling techniques. The results of which allow us to study whether fluctuations in the Rand exchange rate influence the aforementioned financial instruments. This information can then be reinterpreted as an indication of the best hedging options available to investors in the South African market. In contrast to the regression model, as described in section \ref{regression}, this method allows us to assess the dynamic hedging potential of the assets covered in our data set. 
+
+The initial step in the DCC modelling process is to obtain univariate volatility for each series using a GARCH (1,1) process, specified as follows in \ref{eq3}:
+
+
+\begin{align} 
+  &r_t = \mu + \epsilon_t   \label{eq3}    \\ \notag 
+  &varepsilon_t = \sigma_t . z_t \\ \notag
+  &\sigma^2_t = \alpha + \beta_1 \epsilon^2_t-1 + \beta_1\sigma^2_t-1 \\ \notag
+  &z_t \sim N(0,1) \notag
+\end{align}
+
+The dynamic conditional corelations are then estimated using a log-likelihood approach using the standardised residuals extracted from the GARCH (1,1) process. 
+
+The DCC model can be defined as:
+
+\begin{align}
+H_t = D_t.R_t.D_t \label{eq4}
+\end{align}
+
+where $H_t$ is the conditional covariance matrix of the stochastic process, $D_t$ is a diagonal matrix and $R_t$ refers to  the time-varying correlations between assets. Equation \ref{eq4} seperates the variance covariance matrix into identical diagonal matrices and an estimate of the time-varying correlation between assets. 
+
+Estimating $R_t$ requires it to be inverted in each time period, for which we use a proxy equation as in @engle2002:
+
+\begin{align}
+Q _ { i j ,t } &= \overline { Q } + a ( z _ { t - 1} z ^ { \prime } t _ { t - 1} - \overline { Q } ) + b ( Q _ { i j ,t - 1} - \overline { Q } )   \label{eq5} \\ \notag
+ &= ( 1- a - b ) \hat { Q } + a z _ { t - 1} z _ { t - 1} ^ { \prime } + b .Q _ { i j ,t - 1} \notag
+\end{align}
+
+Equation \ref{eq5}'s form is similar to that of a GARCH(1,1) process, with non-negative scalars $a$ and $b$, $Q _ { i j ,t }$ the unconditional sample variance estimate between series $i$ and $j$, and the unconditional matrix of standardized residuals from each univariate pair estimate $\overline { Q }$.We then use equation \ref{eq5} to esimate $R_t$ as:
+
+\begin{align}
+R _ { t } = \operatorname{diag} ( Q _ { t } ) ^ { - 1/ 2} Q _ { t } \cdot \operatorname{diag} ( Q _ { t } ) ^ { - 1/ 2} \label{eq6}
+\end{align}
+
+with the following bivariate elements,
+
+\begin{align}
+R _ { t } = \rho _ { i j ,t } = \frac { q _ { i } ,j ,t } { \sqrt { q _ { i i } ,t \cdot q _ { j } j ,t } } 
+\end{align}
+
+The resulting DCC model is then formulated as:
+
+\begin{align}
+\epsilon _ { t } &\sim N ( 0,D _ { t } \cdot R _ { t } \cdot D _ { t } ) \label{eq7}  \\ \notag
+D^2_t &\sim Univariate\quad GARCH(1,1) \quad process \quad \forall (i,j),\quad i \ne j \\ \notag
+z _ { t } &= D _ { t } ^ { - 1} \cdot \epsilon _ { t } \\ \notag
+Q _ { t } &= \overline { Q } ( 1- a - b ) + a ( z _ { t } ^ { \prime } z _ { t } ) + b ( Q _ { t - 1} ) \\ \notag
+R _ { t } &= \operatorname{Diag} ( Q _ { t } ^ { - 1} ) \cdot Q _ { t } .\operatorname{Din} g ( Q _ { t } ^ { - 1} )
+\end{align}
+
+Fitting this technique to our data implies a two-step approach. First, a univariate GARCH model is applied to the residuals of each of our VAR series' residuals $\alpha_t = z_t - \mu_t$. The volatility series $h_t$ is then estimated in step 2. These volatility series are then standardized (see equation \ref{eq8} below) and used in fitting a DCC model for $\eta _ { t }$.
+
+\begin{align}
+\eta _ { i ,t } = \frac { \alpha _ { i ,t } } { \sigma _ { i ,t } } \label{eq8}
+\end{align}
 
 
 
+\pagebreak
 
 # Results
 
 
 
 # Conclusion
+
+# Appendix \label{appendix}
+
+```{r LongTable, results = 'asis'}
+cover <- unique(regression.data.final %>% pull(Ticker)) 
+# here, run xtable on col.names(rtn to get list of stocks and etfs covered).
+library(knitr)
+kable(cover, caption = "Stocks and ETFs Covered in Analysis", col.names = "\\label{cover}Stocks and ETFs Covered in Analysis", align = 'c') 
+```
 
 
 

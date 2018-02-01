@@ -205,7 +205,7 @@ top.10.reg <-
 
 load_pkg("huxtable")
 
-variable.names <- unique(Regression_data$Ticker, incomparables = FALSE) #**** WHAT SHOULD WE INCLUDE HERE? LEEU?  ****
+variable.names <- unique(Regression_data$Ticker, incomparables = FALSE) 
 
 Title <- "Regression Table"
 

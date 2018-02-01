@@ -204,6 +204,8 @@ DCC \sep Multiple Regression Analysis \sep Rand Hedge \\ \vspace{0.3cm}
 \section{\texorpdfstring{Introduction
 \label{Introduction}}{Introduction }}\label{introduction}
 
+\pagebreak
+
 \section{\texorpdfstring{Literature Review
 \label{Lit_Review}}{Literature Review }}\label{literature-review}
 
@@ -277,7 +279,35 @@ multiple assets against the British pound and US dollar. Their findings
 suggest that gold serves as a potential hedge against exchange rate
 volatility for both of these two currencies.
 
+\pagebreak
+
 \section{\texorpdfstring{Data \label{Data}}{Data }}\label{data}
+
+The data set used in this study includes the daily closing prices of an
+array of equties and ETFs which are traded and easily accessible to
+investors on the Johannesburg Stock Exchange. The top 80 stocks, as
+measured by total market cap, which traded on at least 90\% of days
+between 01/01/2005 and 31/10/2017 were included in the analysis.
+Furthermore, an additional 43 ETFs were included. This was then trimmed
+to include those ETFs which traded on at least 90\% of the
+aforementioned period. A full list of the assets covered in this
+analysis can be found in section \ref{appendix} in table \ref{cover}. In
+addition to these variables, the ZAR/USD exchange rate is included to be
+used as our variable of interest.
+
+The continuously compounded daily sector returns are then calculated by
+taking the log difference of each index series, as:
+
+\begin{align}
+r _ { i ,t } = \operatorname{ln} ( \frac { p _ { i } ,t } { p _ { i ,t - 1} } ) * 100 
+\end{align}
+
+where \(p_t\) represents the closing index price of asset \(i\) at time
+\(t\). Taking the first difference of these return series is then
+imposed to remove the unit root process evident in the data. This data
+is then used in the analysis which follows.
+
+\pagebreak
 
 \section{Methodology}\label{methodology}
 
@@ -324,25 +354,173 @@ most relevant to investors in times of high unstability in the Rand.
 Furthermore, it allows us to minimize noise in the study which may drive
 nonsensical results.
 
+\pagebreak
+
 \subsection{DCC Model}\label{dcc-model}
 
-This study utilises DCC Multivariate Generalized Autoregressive
-Conditional Heteroskedasticity (MV-GARCH) to isolate the time-varying
-conditional correlations between an array of JSE-listed stocks and ETFs.
-This technique offers a parsimonious approach to MV colatility modelling
-by relaxing the constraint of a fixed correlation structure which
-imposed in other modelling techniques. The results of which allow us to
-study whether fluctuations in the Rand exchange rate influence the
-aforementioned financial instruments. This information can then be
-reinterpreted as an indication of the best hedging options available to
-investors in the South African market. In contrast to the regression
-model, as described in section \ref{regression}, this method allows us
-to assess the dynamic hedging potential of the assets covered in our
-data set.
+This study utilises a DCC Multivariate Generalized Autoregressive
+Conditional Heteroskedasticity (MV-GARCH) approach to isolate the
+time-varying conditional correlations between an array of JSE-listed
+stocks and ETFs. This technique offers a parsimonious approach to MV
+colatility modelling by relaxing the constraint of a fixed correlation
+structure which imposed in other modelling techniques. The results of
+which allow us to study whether fluctuations in the Rand exchange rate
+influence the aforementioned financial instruments. This information can
+then be reinterpreted as an indication of the best hedging options
+available to investors in the South African market. In contrast to the
+regression model, as described in section \ref{regression}, this method
+allows us to assess the dynamic hedging potential of the assets covered
+in our data set.
+
+The initial step in the DCC modelling process is to obtain univariate
+volatility for each series using a GARCH (1,1) process, specified as
+follows in \ref{eq3}:
+
+\begin{align} 
+  &r_t = \mu + \epsilon_t   \label{eq3}    \\ \notag 
+  &varepsilon_t = \sigma_t . z_t \\ \notag
+  &\sigma^2_t = \alpha + \beta_1 \epsilon^2_t-1 + \beta_1\sigma^2_t-1 \\ \notag
+  &z_t \sim N(0,1) \notag
+\end{align}
+
+The dynamic conditional corelations are then estimated using a
+log-likelihood approach using the standardised residuals extracted from
+the GARCH (1,1) process.
+
+The DCC model can be defined as:
+
+\begin{align}
+H_t = D_t.R_t.D_t \label{eq4}
+\end{align}
+
+where \(H_t\) is the conditional covariance matrix of the stochastic
+process, \(D_t\) is a diagonal matrix and \(R_t\) refers to the
+time-varying correlations between assets. Equation \ref{eq4} seperates
+the variance covariance matrix into identical diagonal matrices and an
+estimate of the time-varying correlation between assets.
+
+Estimating \(R_t\) requires it to be inverted in each time period, for
+which we use a proxy equation as in Engle
+(\protect\hyperlink{ref-engle2002}{2002}):
+
+\begin{align}
+Q _ { i j ,t } &= \overline { Q } + a ( z _ { t - 1} z ^ { \prime } t _ { t - 1} - \overline { Q } ) + b ( Q _ { i j ,t - 1} - \overline { Q } )   \label{eq5} \\ \notag
+ &= ( 1- a - b ) \hat { Q } + a z _ { t - 1} z _ { t - 1} ^ { \prime } + b .Q _ { i j ,t - 1} \notag
+\end{align}
+
+Equation \ref{eq5}'s form is similar to that of a GARCH(1,1) process,
+with non-negative scalars \(a\) and \(b\), \(Q _ { i j ,t }\) the
+unconditional sample variance estimate between series \(i\) and \(j\),
+and the unconditional matrix of standardized residuals from each
+univariate pair estimate \(\overline { Q }\).We then use equation
+\ref{eq5} to esimate \(R_t\) as:
+
+\begin{align}
+R _ { t } = \operatorname{diag} ( Q _ { t } ) ^ { - 1/ 2} Q _ { t } \cdot \operatorname{diag} ( Q _ { t } ) ^ { - 1/ 2} \label{eq6}
+\end{align}
+
+with the following bivariate elements,
+
+\begin{align}
+R _ { t } = \rho _ { i j ,t } = \frac { q _ { i } ,j ,t } { \sqrt { q _ { i i } ,t \cdot q _ { j } j ,t } } 
+\end{align}
+
+The resulting DCC model is then formulated as:
+
+\begin{align}
+\epsilon _ { t } &\sim N ( 0,D _ { t } \cdot R _ { t } \cdot D _ { t } ) \label{eq7}  \\ \notag
+D^2_t &\sim Univariate\quad GARCH(1,1) \quad process \quad \forall (i,j),\quad i \ne j \\ \notag
+z _ { t } &= D _ { t } ^ { - 1} \cdot \epsilon _ { t } \\ \notag
+Q _ { t } &= \overline { Q } ( 1- a - b ) + a ( z _ { t } ^ { \prime } z _ { t } ) + b ( Q _ { t - 1} ) \\ \notag
+R _ { t } &= \operatorname{Diag} ( Q _ { t } ^ { - 1} ) \cdot Q _ { t } .\operatorname{Din} g ( Q _ { t } ^ { - 1} )
+\end{align}
+
+Fitting this technique to our data implies a two-step approach. First, a
+univariate GARCH model is applied to the residuals of each of our VAR
+series' residuals \(\alpha_t = z_t - \mu_t\). The volatility series
+\(h_t\) is then estimated in step 2. These volatility series are then
+standardized (see equation \ref{eq8} below) and used in fitting a DCC
+model for \(\eta _ { t }\).
+
+\begin{align}
+\eta _ { i ,t } = \frac { \alpha _ { i ,t } } { \sigma _ { i ,t } } \label{eq8}
+\end{align}
+
+\pagebreak
 
 \section{Results}\label{results}
 
 \section{Conclusion}\label{conclusion}
+
+\section{\texorpdfstring{Appendix
+\label{appendix}}{Appendix }}\label{appendix}
+
+\begin{longtable}[]{@{}c@{}}
+\toprule
+\label{cover}Stocks and ETFs Covered in Analysis\tabularnewline
+\midrule
+\endhead
+GLD SJ Equity\tabularnewline
+STX40 SJ Equity\tabularnewline
+STXFIN SJ Equity\tabularnewline
+STXIND SJ Equity\tabularnewline
+SYGEU SJ Equity\tabularnewline
+SYGUK SJ Equity\tabularnewline
+NHM SJ Equity\tabularnewline
+MRP SJ Equity\tabularnewline
+CLS SJ Equity\tabularnewline
+GND SJ Equity\tabularnewline
+SPP SJ Equity\tabularnewline
+LEW SJ Equity\tabularnewline
+MUR SJ Equity\tabularnewline
+ARI SJ Equity\tabularnewline
+TON SJ Equity\tabularnewline
+SUI SJ Equity\tabularnewline
+APN SJ Equity\tabularnewline
+MMI SJ Equity\tabularnewline
+SHP SJ Equity\tabularnewline
+RLO SJ Equity\tabularnewline
+AVI SJ Equity\tabularnewline
+TRU SJ Equity\tabularnewline
+NTC SJ Equity\tabularnewline
+MSM SJ Equity\tabularnewline
+TFG SJ Equity\tabularnewline
+NPK SJ Equity\tabularnewline
+DSY SJ Equity\tabularnewline
+WHL SJ Equity\tabularnewline
+EXX SJ Equity\tabularnewline
+SNH SJ Equity\tabularnewline
+PPC SJ Equity\tabularnewline
+TBS SJ Equity\tabularnewline
+SAP SJ Equity\tabularnewline
+HAR SJ Equity\tabularnewline
+INP SJ Equity\tabularnewline
+IPL SJ Equity\tabularnewline
+BAW SJ Equity\tabularnewline
+NPN SJ Equity\tabularnewline
+BVT SJ Equity\tabularnewline
+RMH SJ Equity\tabularnewline
+ACL SJ Equity\tabularnewline
+NED SJ Equity\tabularnewline
+IMP SJ Equity\tabularnewline
+ITU SJ Equity\tabularnewline
+GFI SJ Equity\tabularnewline
+SLM SJ Equity\tabularnewline
+AMS SJ Equity\tabularnewline
+REM SJ Equity\tabularnewline
+BGA SJ Equity\tabularnewline
+ANG SJ Equity\tabularnewline
+TKG SJ Equity\tabularnewline
+OML SJ Equity\tabularnewline
+MTN SJ Equity\tabularnewline
+FSR SJ Equity\tabularnewline
+SOL SJ Equity\tabularnewline
+SBK SJ Equity\tabularnewline
+CFR SJ Equity\tabularnewline
+AGL SJ Equity\tabularnewline
+BIL SJ Equity\tabularnewline
+\bottomrule
+\end{longtable}
 
 \section*{References}\label{references}
 \addcontentsline{toc}{section}{References}
@@ -368,6 +546,12 @@ Ciner, Cetin, Constantin Gurdgiev, and Brian M Lucey. 2013. ``Hedges and
 Safe Havens: An Examination of Stocks, Bonds, Gold, Oil and Exchange
 Rates.'' \emph{International Review of Financial Analysis} 29. Elsevier:
 202--11.
+
+\hypertarget{ref-engle2002}{}
+Engle, Robert. 2002. ``Dynamic Conditional Correlation: A Simple Class
+of Multivariate Generalized Autoregressive Conditional
+Heteroskedasticity Models.'' \emph{Journal of Business \& Economic
+Statistics} 20 (3). Taylor \& Francis: 339--50.
 
 \hypertarget{ref-fang2002}{}
 Fang, WenShwo, and Stephen M Miller. 2002. ``Dynamic Effects of Currency
